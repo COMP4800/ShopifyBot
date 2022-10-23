@@ -1,5 +1,9 @@
 import boto3
 from botocore.exceptions import ClientError
+import requests
+
+import BulkOperationsQueries
+from config import config
 
 # connecting to an aws service
 # NOTE ---> developers using this code for the first time, you will need to add your credentials using the aws cli
@@ -10,6 +14,7 @@ from botocore.exceptions import ClientError
 # 4. Install all the dependencies if not done yet ---> `pip install -r requirements.txt`
 # 5. In the terminal of the repo ---> aws configure
 # 6. Add your credentials and the code should work since you would be connected to the aws now!
+
 dynamodb = boto3.resource(service_name='dynamodb')
 
 
@@ -30,3 +35,19 @@ def get_items_from_db(table_name):
         print("Error")
     else:
         return response
+
+
+def get_bulk_data(store_name):
+    store_url = f"https://{store_name}.myshopify.com"
+    api_url = f'{store_url}/admin/api/2022-07/graphql.json'
+    bulk_query = requests.post(api_url, auth=(config.APIkeys.KeepNatureSafeAPIKey,
+                                              config.APIkeys.KeepNatureSafeAccessToken),
+                               json={"query": BulkOperationsQueries.BulkOperation})
+    print(bulk_query.json())
+    while True:
+        poll_query = requests.post(api_url, auth=(config.APIkeys.KeepNatureSafeAPIKey,
+                                                  config.APIkeys.KeepNatureSafeAccessToken),
+                                   json={"query": BulkOperationsQueries.PollQuery})
+        print(poll_query.json())
+        if poll_query.json()['data']['currentBulkOperation']['status'] == "COMPLETED":
+            return poll_query
