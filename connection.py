@@ -1,6 +1,9 @@
+import json
+
 import boto3
 from botocore.exceptions import ClientError
 import requests
+import pandas
 
 import BulkOperationsQueries
 from config import config
@@ -38,6 +41,11 @@ def get_items_from_db(table_name):
 
 
 def get_bulk_data(store_name):
+    """
+    This function is just a demo of how the bulk query works in GraphQL
+    :param store_name: the name of the store -> Considering there will be multiple stores
+    :return: a string ->  the url containing the json data
+    """
     store_url = f"https://{store_name}.myshopify.com"
     api_url = f'{store_url}/admin/api/2022-07/graphql.json'
     bulk_query = requests.post(api_url, auth=(config.APIkeys.KeepNatureSafeAPIKey,
@@ -50,4 +58,20 @@ def get_bulk_data(store_name):
                                    json={"query": BulkOperationsQueries.PollQuery})
         print(poll_query.json())
         if poll_query.json()['data']['currentBulkOperation']['status'] == "COMPLETED":
-            return poll_query
+            return poll_query.json()['data']['currentBulkOperation']['url']
+
+
+def show_data(url):
+    """
+    This function returns the actual data parsed from the url we get from the Bulk Operation
+    :param url: a String
+    :return: a dictionary
+    """
+    res = requests.get(url)
+    jsonObj = pandas.read_json(json.loads(json.dumps(res.text)), lines=True)
+    json_file = json.loads(jsonObj.to_json(orient='table'))
+    for each_line in json_file["data"]:
+        print(each_line)
+    return json_file["data"]
+    # response = json.loads(json.dumps(res.json()))
+    # return response

@@ -1,9 +1,15 @@
+"""
+This file will only contain the queries that will be used in getting the data.
+"""
+
+
+# This is the query for the Bulk Operation
 BulkOperation = '''
 mutation {
   bulkOperationRunQuery(
     query:"""
     {
-  orders(query: "created_at:>=2022-09-01 AND created_at:<=2022-09-30") {
+  orders(query: "created_at:>=2022-09-01 AND created_at:<=2022-09-02") {
     edges {
       cursor
       node {
@@ -62,6 +68,7 @@ mutation {
 }
 '''
 
+# This is the query for polling the Bulk Query
 PollQuery = '''
     query{
         currentBulkOperation{

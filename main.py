@@ -1,4 +1,4 @@
-from connection import get_bulk_data
+from connection import get_bulk_data, show_data
 
 # This is the initialization of this repo
 
@@ -8,7 +8,8 @@ list_of_clients = [
 
 
 def main():
-    print(get_bulk_data("keep-it-wild-az"))
+    # print(get_bulk_data("keep-it-wild-az"))
+    print(show_data(get_bulk_data("keep-it-wild-az")))
     # for client in list_of_clients:
     # print(get_bulk_data("keep-it-wild-az"))
     # get_items_from_db(client)
