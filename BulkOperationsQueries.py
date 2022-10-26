@@ -4,69 +4,85 @@ This file will only contain the queries that will be used in getting the data.
 
 
 # This is the query for the Bulk Operation
-BulkOperation = '''
-mutation {
-  bulkOperationRunQuery(
-    query:"""
-    {
-  orders(query: "created_at:>=2022-09-01 AND created_at:<=2022-09-02") {
-    edges {
-      cursor
-      node {
-        customer {
+def create_bulk_query(start_date_of_orders, end_date_of_orders):
+    return f'''
+    mutation {{
+      bulkOperationRunQuery(
+        query:"""
+        {{
+      orders(query: "created_at:>={start_date_of_orders} AND created_at:<={end_date_of_orders}") {{
+        edges {{
+          cursor
+          node {{
+            id
+            name  
+            customer {{
+              id
+              numberOfOrders
+              averageOrderAmountV2{{amount}}
+              createdAt
+            }}
+            createdAt
+            subtotalPriceSet {{
+              shopMoney {{
+                  amount
+                  currencyCode
+              }}
+            }}
+            cartDiscountAmountSet {{
+              shopMoney {{
+                amount
+                currencyCode
+              }}
+            }}
+            totalRefundedSet {{
+              shopMoney {{
+                amount
+                currencyCode
+              }}
+            }}
+            currentSubtotalPriceSet {{
+              shopMoney {{
+                amount
+                currencyCode
+              }}
+            }}
+            totalShippingPriceSet {{
+              shopMoney {{
+                amount
+                currencyCode
+              }}
+            }}
+            totalTaxSet {{
+              shopMoney {{
+                amount
+                currencyCode
+              }}
+            }}
+            totalPriceSet {{
+              shopMoney {{
+                amount
+                currencyCode
+              }}
+            }}
+          }}
+        }}
+      }}
+    }}
+        """
+      ) {{
+        bulkOperation {{
           id
-          numberOfOrders
-        }
-        id
-        name
-        createdAt
-        currentSubtotalPriceSet {
-          shopMoney {
-            amount
-            currencyCode
-          }
-        }
-        cartDiscountAmountSet {
-          shopMoney {
-            amount
-            currencyCode
-          }
-        }
-        totalShippingPriceSet {
-          shopMoney {
-            amount
-            currencyCode
-          }
-        }
-        totalTaxSet {
-          shopMoney {
-            amount
-            currencyCode
-          }
-        }
-        totalPriceSet {
-          shopMoney {
-            amount
-            currencyCode
-          }
-        }
-      }
-    }
-  }
-}
-    """
-  ) {
-    bulkOperation {
-      id
-      status
-    }
-    userErrors {
-      field
-      message
-    }
-  }
-}
-'''
+          status
+        }}
+        userErrors {{
+          field
+          message
+        }}
+      }}
+    }}
+    '''
+
 
 # This is the query for polling the Bulk Query
 PollQuery = '''
