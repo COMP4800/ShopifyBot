@@ -19,5 +19,4 @@ certifi~=2021.10.8
 Pygments~=2.11.1
 setuptools~=58.1.0
 python-dotenv~=0.21.0
-lib~=4.0.0
 pandas~=1.4.1
