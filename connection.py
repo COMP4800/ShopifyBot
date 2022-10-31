@@ -77,15 +77,7 @@ def get_data(url):
     print(url)
     data_to_be_pushed = []
     for each_line in json_file["data"]:
-        line = {
-            # "OrderID": each_line['id'],
-            # "OrderName": each_line['name'],
-            # "CustomerID": each_line['customer']['id'],
-            # "TotalOrdersMadeByTheCustomer": each_line['customer']['numberOfOrders'],
-            # "AverageOrderValue": each_line['customer']['averageOrderAmountV2']['amount'],
-            # "FirstOrderDate": each_line['customer']['createdAt'],
-            # "OrderDate": each_line['createdAt']
-        }
+        line = {}
         if each_line['id'] is None:
             line["OrderID"] = ""
         else:
@@ -175,12 +167,21 @@ def create_and_write_to_aws(table_name, data):
             {
                 'AttributeName': 'OrderID',
                 'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'OrderDate',
+                'AttributeType': 'S'
+
             }
         ],
         KeySchema=[
             {
                 'AttributeName': 'OrderID',
                 'KeyType': 'HASH'
+            },
+            {
+                'AttributeName': 'OrderDate',
+                'KeyType': 'RANGE'
             }
         ],
         ProvisionedThroughput={
@@ -235,18 +236,13 @@ def wrapper(client_name):
         shops_creation_date = get_shops_creation_date(client_name)
         bulk_data_url = get_bulk_data_url(client_name, shops_creation_date, last_day_of_previous_month)
         data = get_data(bulk_data_url)
-        # "https://storage.googleapis.com/shopify-tiers-assets-prod-us-east1/59esjbbhdo39zj7wgaovgouacpj8?GoogleAccess
-        # Id=assets-us-prod%40shopify-tiers.iam.gserviceaccount.com&Expires=1667442095&Signature=Xk2Em2WnUPCWLTK9ZsvmQL
-        # VMhjkritHxI16anv9JY89l9LxrF2LrRPHLfaW%2FoIBR4frcE8QEuJycLNTWyWHRIvOHMF9ZsA4x9yLsFT2a0afEY7Ae5DDIJ8f8lld5ayStG
-        # 3HPruzEwdxGyjroJi2O45yUiDXC%2FrZgrbFcLlYzx4oGSNNCsLnfMCRd80Y9UTY50MNMYFdltfboRBG%2FGx0ajUp4wzAKIku3ERj0yV3XYk
-        # YuLPz8zfpXb0aYqSETnl%2B5Ti%2FPa%2Fp6EQLHGc7aSXjAIgfEBfaHEO4%2FCVlerEM9dEsjD0JuUUHBbKhznG1C4jxxAEzhyO6%2B6lY%
-        # 2Fd8AanRXNdw%3D%3D&response-content-disposition=attachment%3B+filename%3D%22bulk-2027466260671.jsonl%22%3B+fi
-        # lename%2A%3DUTF-8%27%27bulk-2027466260671.jsonl&response-content-type=application%2Fjsonl"
         create_and_write_to_aws(client_name, data)
         print(bulk_data_url)
     else:
-        bulk_data_url = get_bulk_data_url(client_name, first_day_of_previous_month_string,
-                                          last_day_of_previous_month_string)
+        bulk_data_url = get_bulk_data_url("keep-it-wild-az", first_day_of_previous_month_string,
+                                          f"{last_day_of_previous_month_string}T24:00:00")
+        # bulk_data_url = get_bulk_data_url("keep-it-wild-az", "2022-01-01T00:00:00",
+        #                                   f"{last_day_of_previous_month_string}T24:00:00")
         data = get_data(bulk_data_url)
         write_to_aws(client_name, data)
         print(bulk_data_url)
