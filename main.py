@@ -1,4 +1,4 @@
-from connection import wrapper, get_data_from_shopify, split_data_by_year_and_month
+from connection import wrapper, get_data_from_shopify, split_data_by_year_and_month, transform_split_data
 
 # This is the initialization of this repo
 
@@ -9,8 +9,9 @@ list_of_clients = [
 
 def main():
     for client in list_of_clients:
-        data = []
-        split_data_by_year_and_month(data)
+        # data = []
+        data = split_data_by_year_and_month()
+        transform_split_data(data)
         # wrapper(client)
         # get_data_from_shopify(client, "2022-01-01", "2022-11-01")
 
