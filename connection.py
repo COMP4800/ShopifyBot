@@ -271,7 +271,7 @@ def get_data_from_shopify(client_name, start_date, end_date):
     print(url)
 
 
-def transform_raw_data_to_monthly_analysis(data: list):
+def split_data_by_year_and_month(data: list):
     """
     This function separates the collected data into chunks of monthly data.
     :param data: a list of orders
