@@ -7,6 +7,7 @@ import requests
 import pandas
 import BulkOperationsQueries
 from config import config
+from collections import defaultdict
 
 # connecting to an aws service
 # NOTE ---> developers using this code for the first time, you will need to add your credentials using the aws cli
@@ -59,7 +60,7 @@ def get_bulk_data_url(store_name, start_date, end_date):
         poll_query = requests.post(api_url, auth=(config.APIkeys.KeepNatureSafeAPIKey,
                                                   config.APIkeys.KeepNatureSafeAccessToken),
                                    json={"query": BulkOperationsQueries.PollQuery})
-        # print(poll_query.json())
+        print(poll_query.json())
         if poll_query.json()['data']['currentBulkOperation']['status'] == "COMPLETED":
             print(poll_query.json()['data']['currentBulkOperation']['url'])
             return poll_query.json()['data']['currentBulkOperation']['url']
@@ -108,7 +109,8 @@ def get_data(url):
         if each_line['createdAt'] is None:
             line["OrderDate"] = ""
         else:
-            line["OrderDate"] = each_line['createdAt']
+            date_for_each_order = str(each_line['createdAt'])[:-1]
+            line["OrderDate"] = (datetime.datetime.fromisoformat(date_for_each_order) - timedelta(hours=8)).isoformat()
 
         if each_line["currentTotalDiscountsSet"] is None:
             line["Discounts"] = "0.00"
@@ -267,3 +269,26 @@ def get_data_from_shopify(client_name, start_date, end_date):
     df.to_excel("Shopify_Data_From_GraphQl_API-123.xlsx", index=False)
     print(len(data))
     print(url)
+
+
+def transform_raw_data_to_monthly_analysis(data: list):
+    """
+    This function separates the collected data into chunks of monthly data.
+    :param data: a list of orders
+    :return: a list of dictionaries where each key is a month-year combination and value is a list of all the orders in
+    that month-year.
+    """
+    # data = get_data("https://storage.googleapis.com/shopify-tiers-assets-prod-us-east1/dxfytpsplqu0khm7lmq484ncs4jd?GoogleAccessId=assets-us-prod%40shopify-tiers.iam.gserviceaccount.com&Expires=1668069120&Signature=OsNTqYwc%2F6%2BrR7WLX6h84gmgscmh%2BbdRNGr5mSMRas9M8pEwFFY%2BR2e4gLsob8sDYzFXL%2F59jatMW7MTbpV2tvoZ8kjz9UIuIuQoszAzd73inSt6XtEXxVda0HCV1OefEoOrUjMDRQ0%2FrmOXTF42XtRBJH7JNpWM8c8TN6fVwRangsF4Fux8TIq1ekVTyxrdhPY2m00CwQ4wrQLuUQcIDbABhb%2BMzvCGDzBMei20FzpK406ZUMpXa3v0LzoinRSh9Q3yxPPcIlGkX1WDl3%2FYBnokwsmtnaQ1lL2MYfTloVQpnUDHF2wG%2Bau4yOCi32Dwp8gQB8m8RPnA3jyqUuSzWg%3D%3D&response-content-disposition=attachment%3B+filename%3D%22bulk-2064329212095.jsonl%22%3B+filename%2A%3DUTF-8%27%27bulk-2064329212095.jsonl&response-content-type=application%2Fjsonl")
+    data_by_month = defaultdict(list)
+    for each_line in data:
+        date_for_each_order = each_line["OrderDate"]
+        year = datetime.datetime.fromisoformat(date_for_each_order).year
+        month = datetime.datetime.fromisoformat(date_for_each_order).month
+        data_by_month[f'{year}-{month}'].append(each_line)
+    data_separated_by_month_and_year = []
+    for i in data_by_month.items():
+        each_months_data = {f'{i[0]}': i[1]}
+        data_separated_by_month_and_year.append(each_months_data)
+    print(len(data_separated_by_month_and_year))
+    return data_separated_by_month_and_year
+

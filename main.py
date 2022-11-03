@@ -1,4 +1,4 @@
-from connection import wrapper, get_data_from_shopify
+from connection import wrapper, get_data_from_shopify, transform_raw_data_to_monthly_analysis
 
 # This is the initialization of this repo
 
@@ -9,7 +9,10 @@ list_of_clients = [
 
 def main():
     for client in list_of_clients:
-        wrapper(client)
+        transform_raw_data_to_monthly_analysis()
+        # wrapper(client)
+        # get_data_from_shopify(client, "2022-01-01", "2022-11-01")
+
         # Anything below this line will be executed for all the clients in the list_of_clients
 
         # Get the date when the shop was created
