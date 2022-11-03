@@ -1,3 +1,4 @@
+import datetime
 import json
 from datetime import date, timedelta
 import boto3
@@ -58,7 +59,7 @@ def get_bulk_data_url(store_name, start_date, end_date):
         poll_query = requests.post(api_url, auth=(config.APIkeys.KeepNatureSafeAPIKey,
                                                   config.APIkeys.KeepNatureSafeAccessToken),
                                    json={"query": BulkOperationsQueries.PollQuery})
-        print(poll_query.json())
+        # print(poll_query.json())
         if poll_query.json()['data']['currentBulkOperation']['status'] == "COMPLETED":
             print(poll_query.json()['data']['currentBulkOperation']['url'])
             return poll_query.json()['data']['currentBulkOperation']['url']
@@ -73,7 +74,7 @@ def get_data(url):
     res = requests.get(url)
     jsonObj = pandas.read_json(json.loads(json.dumps(res.text)), lines=True)
     json_file = json.loads(jsonObj.to_json(orient='table'))
-    print(json_file["data"])
+    # print(json_file["data"])
     print(url)
     data_to_be_pushed = []
     for each_line in json_file["data"]:
@@ -109,15 +110,10 @@ def get_data(url):
         else:
             line["OrderDate"] = each_line['createdAt']
 
-        if each_line['subtotalPriceSet'] is None:
-            line["GrossSales"] = "0.00"
-        else:
-            line["GrossSales"] = each_line['subtotalPriceSet']['shopMoney']['amount']
-
-        if each_line["cartDiscountAmountSet"] is None:
+        if each_line["currentTotalDiscountsSet"] is None:
             line["Discounts"] = "0.00"
         else:
-            line["Discounts"] = each_line["cartDiscountAmountSet"]['shopMoney']['amount']
+            line["Discounts"] = each_line["currentTotalDiscountsSet"]['shopMoney']['amount']
 
         if each_line["totalRefundedSet"] is None:
             line["Returns"] = "0.00"
@@ -133,18 +129,28 @@ def get_data(url):
             line["Shipping"] = "0.00"
         else:
             line["Shipping"] = each_line["totalShippingPriceSet"]['shopMoney']['amount']
+            if each_line["totalRefundedShippingSet"] is not None:
+                line["Shipping"] = str(float(each_line["totalShippingPriceSet"]['shopMoney']['amount']) -
+                                       float(each_line["totalRefundedShippingSet"]['shopMoney']['amount']))
 
         if each_line["totalTaxSet"] is None:
             line["Taxes"] = "0.00"
         else:
             line["Taxes"] = each_line["totalTaxSet"]['shopMoney']['amount']
 
-        if each_line["totalPriceSet"] is None:
+        if each_line["currentTotalPriceSet"] is None:
             line["TotalSales"] = "0.00"
         else:
-            line["TotalSales"] = each_line["totalPriceSet"]['shopMoney']['amount']
+            line["TotalSales"] = each_line["currentTotalPriceSet"]['shopMoney']['amount']
 
-        print(line)
+        if each_line['currentSubtotalPriceSet'] is None:
+            line["GrossSales"] = "0.00"
+        else:
+            line["GrossSales"] = str(float(line["NetSales"]) +
+                                     float(line["Discounts"]) +
+                                     float(line["Returns"]))
+
+        # print(line)
         data_to_be_pushed.append(line)
     return data_to_be_pushed
 
@@ -228,21 +234,36 @@ def wrapper(client_name):
     """
     existing_tables = dynamodb_client.list_tables()['TableNames']
     last_day_of_previous_month = date.today().replace(day=1) - timedelta(days=1)
-    last_day_of_previous_month_string = str(last_day_of_previous_month)
+    first_day_of_this_month = f'{datetime.datetime.today().replace(day=1)}'
+    # last_day_of_previous_month_string = f'{last_day_of_previous_month.year}-{last_day_of_previous_month.month}' \
+    #                                     f'-{last_day_of_previous_month.day + 1}'
     first_day_of_previous_month_string = str(date.today().replace(day=1) -
                                              timedelta(days=last_day_of_previous_month.day))
+    shops_creation_date = get_shops_creation_date(client_name)
 
     if client_name not in existing_tables:
-        shops_creation_date = get_shops_creation_date(client_name)
-        bulk_data_url = get_bulk_data_url(client_name, shops_creation_date, last_day_of_previous_month)
+        bulk_data_url = get_bulk_data_url(client_name, shops_creation_date, first_day_of_this_month)
         data = get_data(bulk_data_url)
         create_and_write_to_aws(client_name, data)
         print(bulk_data_url)
     else:
-        bulk_data_url = get_bulk_data_url("keep-it-wild-az", first_day_of_previous_month_string,
-                                          f"{last_day_of_previous_month_string}T24:00:00")
-        # bulk_data_url = get_bulk_data_url("keep-it-wild-az", "2022-01-01T00:00:00",
-        #                                   f"{last_day_of_previous_month_string}T24:00:00")
+        bulk_data_url = get_bulk_data_url(client_name, first_day_of_previous_month_string,
+                                          first_day_of_this_month)
         data = get_data(bulk_data_url)
         write_to_aws(client_name, data)
-        print(bulk_data_url)
+    print(bulk_data_url)
+
+
+def get_data_from_shopify(client_name, start_date, end_date):
+    """
+    This method can be used to test data by getting a xl file.
+    :param client_name: name of the shop
+    :param start_date: a string (yyyy-mm-dd)
+    :param end_date: a string (yyyy-mm-dd) the day should be one more than the last date you actually want
+    """
+    url = get_bulk_data_url(client_name, start_date, end_date)
+    data = get_data(url)
+    df = pandas.DataFrame(data=data)
+    df.to_excel("Shopify_Data_From_GraphQl_API-123.xlsx", index=False)
+    print(len(data))
+    print(url)

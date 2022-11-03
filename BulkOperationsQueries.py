@@ -10,7 +10,7 @@ def create_bulk_query(start_date_of_orders, end_date_of_orders):
       bulkOperationRunQuery(
         query:"""
         {{
-      orders(query: "created_at:>={start_date_of_orders} AND created_at:<={end_date_of_orders}") {{
+      orders(query: "created_at:>={start_date_of_orders} AND created_at:<{end_date_of_orders}") {{
         edges {{
           cursor
           node {{
@@ -23,13 +23,7 @@ def create_bulk_query(start_date_of_orders, end_date_of_orders):
               createdAt
             }}
             createdAt
-            subtotalPriceSet {{
-              shopMoney {{
-                  amount
-                  currencyCode
-              }}
-            }}
-            cartDiscountAmountSet {{
+            currentTotalDiscountsSet {{
               shopMoney {{
                 amount
                 currencyCode
@@ -53,13 +47,18 @@ def create_bulk_query(start_date_of_orders, end_date_of_orders):
                 currencyCode
               }}
             }}
+            totalRefundedShippingSet{{
+                shopMoney{{
+                    amount
+                }}
+            }}
             totalTaxSet {{
               shopMoney {{
                 amount
                 currencyCode
               }}
             }}
-            totalPriceSet {{
+            currentTotalPriceSet {{
               shopMoney {{
                 amount
                 currencyCode

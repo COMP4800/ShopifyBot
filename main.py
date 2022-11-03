@@ -1,4 +1,4 @@
-from connection import wrapper
+from connection import wrapper, get_data_from_shopify
 
 # This is the initialization of this repo
 
