@@ -1,4 +1,5 @@
-from connection import wrapper, get_data_from_shopify, split_data_by_year_and_month, transform_split_data
+from connection import wrapper, get_data_from_shopify, split_data_by_year_and_month, transform_split_data, \
+    get_bulk_data_url, get_data, create_and_write_to_aws_with_lsi
 
 # This is the initialization of this repo
 
@@ -9,9 +10,17 @@ list_of_clients = [
 
 def main():
     for client in list_of_clients:
+
+        # Trying LSI
+        url = get_bulk_data_url(client, "2022-05-01", "2022-11-01")
+        data = get_data(url)
+        create_and_write_to_aws_with_lsi(f'{client}-raw-with-LSI', data)
+
+
+
         # data = []
-        data = split_data_by_year_and_month()
-        transform_split_data(data)
+        # data = split_data_by_year_and_month()
+        # transform_split_data(data)
         # wrapper(client)
         # get_data_from_shopify(client, "2022-01-01", "2022-11-01")
 

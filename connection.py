@@ -95,22 +95,33 @@ def get_data(url):
             line["TotalOrdersMadeByTheCustomer"] = ""
             line["AverageOrderValue"] = ""
             line["FirstOrderDate"] = ""
-            line["IsFirstOrder"] = False
+            # line["IsFirstOrder"] = False
         else:
             line["CustomerID"] = each_line['customer']['id']
             line["TotalOrdersMadeByTheCustomer"] = each_line['customer']['numberOfOrders']
             line["AverageOrderValue"] = each_line['customer']['averageOrderAmountV2']['amount']
             line["FirstOrderDate"] = each_line['customer']['createdAt']
-            if each_line['customer']['numberOfOrders'] == '1':
-                line["IsFirstOrder"] = True
-            else:
-                line["IsFirstOrder"] = False
 
         if each_line['createdAt'] is None:
             line["OrderDate"] = ""
         else:
             date_for_each_order = str(each_line['createdAt'])[:-1]
             line["OrderDate"] = (datetime.datetime.fromisoformat(date_for_each_order) - timedelta(hours=8)).isoformat()
+            line["MonthAndYear"] = f'{datetime.datetime.fromisoformat(line["OrderDate"]).year}' \
+                                   f'-{datetime.datetime.fromisoformat(line["OrderDate"]).month}'
+        # if each_line['customer']['numberOfOrders'] == '1':
+        #     line["IsFirstOrder"] = True
+        # else:
+        #     line["IsFirstOrder"] = False
+        if each_line["customer"] is not None:
+            order_date_month_year = f'{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).month}'
+            first_order_month_year = f'{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).month}'
+            if order_date_month_year == first_order_month_year:
+                line["IsFirstOrderMonth"] = True
+            else:
+                line["IsFirstOrderMonth"] = False
+        else:
+            line["IsFirstOrderMonth"] = None
 
         if each_line["currentTotalDiscountsSet"] is None:
             line["Discounts"] = "0.00"
@@ -274,7 +285,7 @@ def get_data_from_shopify(client_name, start_date, end_date):
 def split_data_by_year_and_month():
     """
     This function separates the collected data into chunks of monthly data.
-    :param data: a list of orders
+    # :param data: a list of orders
     :return: a list of dictionaries where each key is a month-year combination and value is a list of all the orders in
     that month-year.
     """
@@ -301,32 +312,110 @@ def transform_split_data(data: list):
     :return: a list of python dictionaries(the transformed data)
     """
     transformed_data = []
-    print(list(data[9].keys())[0])
-    print(len((list(data[9].values())[0])))
     for each_month_year in data:
         each_month_year_values = list(each_month_year.values())
         each_month_year_key = list(each_month_year.keys())[0]
         list_of_monthly_orders = each_month_year_values[0]
+        first_order_set = []
+        multiple_orders_set = []
         first_time_count = 0
         multiple_count = 0
-
         first_time_sales = 0
         multiple_sales = 0
         first_time_transformed = {"Type": "First", "Date": f'{each_month_year_key}'}
         multiple_transformed = {"Type": "Multiple", "Date": f'{each_month_year_key}'}
         for orders in list_of_monthly_orders:
-            if orders["IsFirstOrder"] is True:
-                first_time_count += 1
-                first_time_sales += float(orders["TotalSales"])
-            elif orders["IsFirstOrder"] is False:
-                multiple_count += 1
-                multiple_sales += float(orders["TotalSales"])
+            if orders["IsFirstOrderMonth"] is not None:
+                if orders["IsFirstOrderMonth"] is True:
+                    first_time_count += 1
+                    first_time_sales += float(orders["TotalSales"])
+                    first_order_set.append(orders["CustomerID"])
+                elif orders["IsFirstOrderMonth"] is False:
+                    multiple_count += 1
+                    multiple_sales += float(orders["TotalSales"])
+                    multiple_orders_set.append(orders["CustomerID"])
         first_time_transformed["Count"] = first_time_count
         multiple_transformed["Count"] = multiple_count
         first_time_transformed["TotalSales"] = round(first_time_sales, 2)
         multiple_transformed["TotalSales"] = round(multiple_sales, 2)
+        first_time_transformed["AOV"] = round(float(first_time_sales/first_time_count), 2)
+        multiple_transformed["AOV"] = round(float(multiple_sales/multiple_count), 2)
+        first_time_transformed["Avg. Orders"] = round(first_time_count/len(set(first_order_set)), 3)
+        multiple_transformed["Avg. Orders"] = round(multiple_count/len(set(multiple_orders_set)), 3)
         transformed_data.append(first_time_transformed)
         transformed_data.append(multiple_transformed)
     for items in transformed_data:
         print(items)
     return transformed_data
+
+
+def create_and_write_to_aws_with_lsi(table_name, data):
+    """
+    Create a tabel first and write the data with an LSI
+    :param table_name: a string
+    :param data: a python dictionary -> JSON-like
+    """
+    dynamodb_client.create_table(
+        TableName=table_name,
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'MonthAndYear',
+                'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'OrderID',
+                'AttributeType': 'S'
+
+            },
+            {
+                'AttributeName': 'OrderDate',
+                'AttributeType': 'S'
+            }
+        ],
+        KeySchema=[
+            {
+                'AttributeName': 'MonthAndYear',
+                'KeyType': 'HASH'
+            },
+            {
+                'AttributeName': 'OrderID',
+                'KeyType': 'RANGE'
+            }
+        ],
+        LocalSecondaryIndexes=[
+            {
+                'IndexName': 'OrdersByMonthAndDate',
+                'KeySchema': [
+                    {
+                        'AttributeName': 'MonthAndYear',
+                        'KeyType': 'HASH'
+                    },
+                    {
+                        'AttributeName': 'OrderDate',
+                        'KeyType': 'RANGE'
+                    },
+                ],
+                'Projection': {
+                    'ProjectionType': 'ALL'
+                }
+            }
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        },
+
+    )
+    print(f'{table_name} Table created, Now Writing all the past orders')
+
+    waiter = dynamodb_client.get_waiter('table_exists')
+    waiter.wait(TableName=table_name)
+    dynamodb_table = dynamodb.Table(table_name)
+
+    try:
+        with dynamodb_table.batch_writer() as writer:
+            for item in data:
+                writer.put_item(Item=item)
+            print("Success")
+    except ClientError as e:
+        print(f"Couldn't load data to table {table_name} - {e}")
