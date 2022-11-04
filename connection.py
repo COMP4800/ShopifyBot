@@ -107,8 +107,8 @@ def get_data(url):
         else:
             date_for_each_order = str(each_line['createdAt'])[:-1]
             line["OrderDate"] = (datetime.datetime.fromisoformat(date_for_each_order) - timedelta(hours=8)).isoformat()
-            line["MonthAndYear"] = f'{datetime.datetime.fromisoformat(line["OrderDate"]).year}' \
-                                   f'-{datetime.datetime.fromisoformat(line["OrderDate"]).month}'
+            line["Year"] = f'{datetime.datetime.fromisoformat(line["OrderDate"]).year}'
+            # f'-{datetime.datetime.fromisoformat(line["OrderDate"]).month}'
         # if each_line['customer']['numberOfOrders'] == '1':
         #     line["IsFirstOrder"] = True
         # else:
@@ -289,7 +289,8 @@ def split_data_by_year_and_month():
     :return: a list of dictionaries where each key is a month-year combination and value is a list of all the orders in
     that month-year.
     """
-    data = get_data("https://storage.googleapis.com/shopify-tiers-assets-prod-us-east1/dxfytpsplqu0khm7lmq484ncs4jd?GoogleAccessId=assets-us-prod%40shopify-tiers.iam.gserviceaccount.com&Expires=1668069120&Signature=OsNTqYwc%2F6%2BrR7WLX6h84gmgscmh%2BbdRNGr5mSMRas9M8pEwFFY%2BR2e4gLsob8sDYzFXL%2F59jatMW7MTbpV2tvoZ8kjz9UIuIuQoszAzd73inSt6XtEXxVda0HCV1OefEoOrUjMDRQ0%2FrmOXTF42XtRBJH7JNpWM8c8TN6fVwRangsF4Fux8TIq1ekVTyxrdhPY2m00CwQ4wrQLuUQcIDbABhb%2BMzvCGDzBMei20FzpK406ZUMpXa3v0LzoinRSh9Q3yxPPcIlGkX1WDl3%2FYBnokwsmtnaQ1lL2MYfTloVQpnUDHF2wG%2Bau4yOCi32Dwp8gQB8m8RPnA3jyqUuSzWg%3D%3D&response-content-disposition=attachment%3B+filename%3D%22bulk-2064329212095.jsonl%22%3B+filename%2A%3DUTF-8%27%27bulk-2064329212095.jsonl&response-content-type=application%2Fjsonl")
+    data = get_data(
+        "https://storage.googleapis.com/shopify-tiers-assets-prod-us-east1/dxfytpsplqu0khm7lmq484ncs4jd?GoogleAccessId=assets-us-prod%40shopify-tiers.iam.gserviceaccount.com&Expires=1668069120&Signature=OsNTqYwc%2F6%2BrR7WLX6h84gmgscmh%2BbdRNGr5mSMRas9M8pEwFFY%2BR2e4gLsob8sDYzFXL%2F59jatMW7MTbpV2tvoZ8kjz9UIuIuQoszAzd73inSt6XtEXxVda0HCV1OefEoOrUjMDRQ0%2FrmOXTF42XtRBJH7JNpWM8c8TN6fVwRangsF4Fux8TIq1ekVTyxrdhPY2m00CwQ4wrQLuUQcIDbABhb%2BMzvCGDzBMei20FzpK406ZUMpXa3v0LzoinRSh9Q3yxPPcIlGkX1WDl3%2FYBnokwsmtnaQ1lL2MYfTloVQpnUDHF2wG%2Bau4yOCi32Dwp8gQB8m8RPnA3jyqUuSzWg%3D%3D&response-content-disposition=attachment%3B+filename%3D%22bulk-2064329212095.jsonl%22%3B+filename%2A%3DUTF-8%27%27bulk-2064329212095.jsonl&response-content-type=application%2Fjsonl")
     data_by_month = defaultdict(list)
     for each_line in data:
         date_for_each_order = each_line["OrderDate"]
@@ -314,7 +315,7 @@ def transform_split_data(data: list):
     transformed_data = []
     for each_month_year in data:
         each_month_year_values = list(each_month_year.values())
-        each_month_year_key = list(each_month_year.keys())[0]
+        each_month_year_key = str(list(each_month_year.keys())[0])
         list_of_monthly_orders = each_month_year_values[0]
         first_order_set = []
         multiple_orders_set = []
@@ -334,14 +335,14 @@ def transform_split_data(data: list):
                     multiple_count += 1
                     multiple_sales += float(orders["TotalSales"])
                     multiple_orders_set.append(orders["CustomerID"])
-        first_time_transformed["Count"] = first_time_count
-        multiple_transformed["Count"] = multiple_count
-        first_time_transformed["TotalSales"] = round(first_time_sales, 2)
-        multiple_transformed["TotalSales"] = round(multiple_sales, 2)
-        first_time_transformed["AOV"] = round(float(first_time_sales/first_time_count), 2)
-        multiple_transformed["AOV"] = round(float(multiple_sales/multiple_count), 2)
-        first_time_transformed["Avg. Orders"] = round(first_time_count/len(set(first_order_set)), 3)
-        multiple_transformed["Avg. Orders"] = round(multiple_count/len(set(multiple_orders_set)), 3)
+        first_time_transformed["Count"] = str(first_time_count)
+        multiple_transformed["Count"] = str(multiple_count)
+        first_time_transformed["TotalSales"] = f'{(round(first_time_sales, 2))}'
+        multiple_transformed["TotalSales"] = f'{round(multiple_sales, 2)}'
+        first_time_transformed["AOV"] = f'{round(float(first_time_sales / first_time_count), 2)}'
+        multiple_transformed["AOV"] = f'{round(float(multiple_sales / multiple_count), 2)}'
+        first_time_transformed["Avg. Orders"] = f'{round(first_time_count / len(set(first_order_set)), 3)}'
+        multiple_transformed["Avg. Orders"] = f'{round(multiple_count / len(set(multiple_orders_set)), 3)}'
         transformed_data.append(first_time_transformed)
         transformed_data.append(multiple_transformed)
     for items in transformed_data:
@@ -359,7 +360,7 @@ def create_and_write_to_aws_with_lsi(table_name, data):
         TableName=table_name,
         AttributeDefinitions=[
             {
-                'AttributeName': 'MonthAndYear',
+                'AttributeName': 'Year',
                 'AttributeType': 'S'
             },
             {
@@ -374,7 +375,7 @@ def create_and_write_to_aws_with_lsi(table_name, data):
         ],
         KeySchema=[
             {
-                'AttributeName': 'MonthAndYear',
+                'AttributeName': 'Year',
                 'KeyType': 'HASH'
             },
             {
@@ -387,7 +388,7 @@ def create_and_write_to_aws_with_lsi(table_name, data):
                 'IndexName': 'OrdersByMonthAndDate',
                 'KeySchema': [
                     {
-                        'AttributeName': 'MonthAndYear',
+                        'AttributeName': 'Year',
                         'KeyType': 'HASH'
                     },
                     {
@@ -411,6 +412,56 @@ def create_and_write_to_aws_with_lsi(table_name, data):
     waiter = dynamodb_client.get_waiter('table_exists')
     waiter.wait(TableName=table_name)
     dynamodb_table = dynamodb.Table(table_name)
+
+    try:
+        with dynamodb_table.batch_writer() as writer:
+            for item in data:
+                writer.put_item(Item=item)
+            print("Success")
+    except ClientError as e:
+        print(f"Couldn't load data to table {table_name} - {e}")
+
+
+def create_and_write_to_aws_with_lsi_transformed(table_name, data):
+    """
+    Create a tabel first and write the data with an LSI -> transformations
+    :param table_name: a string
+    :param data: a python dictionary -> JSON-like
+    """
+    dynamodb_client.create_table(
+        TableName=f'{table_name}-transformed',
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'Date',
+                'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'Type',
+                'AttributeType': 'S'
+
+            }
+        ],
+        KeySchema=[
+            {
+                'AttributeName': 'Date',
+                'KeyType': 'HASH'
+            },
+            {
+                'AttributeName': 'Type',
+                'KeyType': 'RANGE'
+            }
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        },
+
+    )
+    print(f'{table_name} Table created, Now Writing all the past orders')
+
+    waiter = dynamodb_client.get_waiter('table_exists')
+    waiter.wait(TableName=f'{table_name}-transformed')
+    dynamodb_table = dynamodb.Table(f'{table_name}-transformed')
 
     try:
         with dynamodb_table.batch_writer() as writer:
