@@ -6,7 +6,6 @@ from botocore.exceptions import ClientError
 import requests
 import pandas
 import BulkOperationsQueries
-from config import config
 from collections import defaultdict
 
 # connecting to an aws service
@@ -23,31 +22,7 @@ dynamodb = boto3.resource(service_name='dynamodb')
 dynamodb_client = boto3.client(service_name='dynamodb')
 
 
-def get_bulk_data_url(store_name: str, start_date: str, end_date: str):
-    """
-    This function is just a demo of how the bulk query works in GraphQL
-    :param start_date: The start date from which we want to get the data
-    :param end_date: The end date until which we want the data
-    :param store_name: the name of the store -> Considering there will be multiple stores
-    :return: a string ->  the url containing the json data
-    """
-    store_url = f"https://{store_name}.myshopify.com"
-    api_url = f'{store_url}/admin/api/2022-07/graphql.json'
-    bulk_query = requests.post(api_url, auth=(config.APIkeys.KeepNatureSafeAPIKey,
-                                              config.APIkeys.KeepNatureSafeAccessToken),
-                               json={"query": BulkOperationsQueries.create_bulk_query(start_date, end_date)})
-    print(bulk_query.json())
-    while True:
-        poll_query = requests.post(api_url, auth=(config.APIkeys.KeepNatureSafeAPIKey,
-                                                  config.APIkeys.KeepNatureSafeAccessToken),
-                                   json={"query": BulkOperationsQueries.PollQuery})
-        print(poll_query.json())
-        if poll_query.json()['data']['currentBulkOperation']['status'] == "COMPLETED":
-            print(poll_query.json()['data']['currentBulkOperation']['url'])
-            return poll_query.json()['data']['currentBulkOperation']['url']
-
-
-def get_data(url: str):
+def get_data(url: str) -> list:
     """
     This function returns the actual data parsed from the url we get from the Bulk Operation
     :param url: a String
@@ -71,38 +46,30 @@ def get_data(url: str):
         else:
             line["OrderName"] = each_line['name']
 
-        if each_line['customer'] is None:
-            line["CustomerID"] = ""
-            line["TotalOrdersMadeByTheCustomer"] = ""
-            line["AverageOrderValue"] = ""
-            line["FirstOrderDate"] = ""
-            # line["IsFirstOrder"] = False
-        else:
-            line["CustomerID"] = each_line['customer']['id']
-            line["TotalOrdersMadeByTheCustomer"] = each_line['customer']['numberOfOrders']
-            line["AverageOrderValue"] = each_line['customer']['averageOrderAmountV2']['amount']
-            line["FirstOrderDate"] = each_line['customer']['createdAt']
-
         if each_line['createdAt'] is None:
             line["OrderDate"] = ""
         else:
             date_for_each_order = str(each_line['createdAt'])[:-1]
             line["OrderDate"] = (datetime.datetime.fromisoformat(date_for_each_order) - timedelta(hours=8)).isoformat()
             line["Year"] = f'{datetime.datetime.fromisoformat(line["OrderDate"]).year}'
-            # f'-{datetime.datetime.fromisoformat(line["OrderDate"]).month}'
-        # if each_line['customer']['numberOfOrders'] == '1':
-        #     line["IsFirstOrder"] = True
-        # else:
-        #     line["IsFirstOrder"] = False
-        if each_line["customer"] is not None:
-            order_date_month_year = f'{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).month}'
-            first_order_month_year = f'{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).month} '
-            if order_date_month_year == first_order_month_year:
-                line["IsFirstOrderMonth"] = True
-            else:
-                line["IsFirstOrderMonth"] = False
+
+        if each_line['customer'] is None:
+            line["CustomerID"] = ""
+            line["TotalOrdersMadeByTheCustomer"] = ""
+            line["AverageOrderValue"] = ""
+            line["FirstOrderDate"] = ""
+            line["IsFirstOrderMonth"] = "None"
         else:
-            line["IsFirstOrderMonth"] = None
+            line["CustomerID"] = each_line['customer']['id']
+            line["TotalOrdersMadeByTheCustomer"] = each_line['customer']['numberOfOrders']
+            line["AverageOrderValue"] = each_line['customer']['averageOrderAmountV2']['amount']
+            line["FirstOrderDate"] = each_line['customer']['createdAt']
+            order_date_month_year = f'{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).month}'
+            first_order_month_year = f'{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).month}'
+            if order_date_month_year == first_order_month_year:
+                line["IsFirstOrderMonth"] = "True"
+            else:
+                line["IsFirstOrderMonth"] = "False"
 
         if each_line["currentTotalDiscountsSet"] is None:
             line["Discounts"] = "0.00"
@@ -149,14 +116,42 @@ def get_data(url: str):
     return data_to_be_pushed
 
 
-def get_shops_creation_date(shop_name: str):
+def get_bulk_data_url(store_name: str, start_date: str, end_date: str, api_key: str, access_token: str) -> str:
+    """
+    This function is just a demo of how the bulk query works in GraphQL
+    :param access_token: a string -> the access token of that client
+    :param api_key: a string -> the api key of that client
+    :param start_date: The start date from which we want to get the data
+    :param end_date: The end date until which we want the data
+    :param store_name: the name of the store -> Considering there will be multiple stores
+    :return: a string ->  the url containing the json data
+    """
+    store_url = f"https://{store_name}.myshopify.com"
+    api_url = f'{store_url}/admin/api/2022-07/graphql.json'
+
+    bulk_query = requests.post(api_url, auth=(api_key, access_token),
+                               json={"query": BulkOperationsQueries.create_bulk_query(start_date, end_date)})
+    print(bulk_query.json())
+    while True:
+        poll_query = requests.post(api_url, auth=(api_key, access_token),
+                                   json={"query": BulkOperationsQueries.PollQuery})
+        print(poll_query.json())
+        if poll_query.json()['data']['currentBulkOperation']['status'] == "COMPLETED":
+            # url = poll_query.json()['data']['currentBulkOperation']['url']
+            # data = get_data(url)
+            # return data
+            # print(poll_query.json()['data']['currentBulkOperation']['url'])
+            return poll_query.json()['data']['currentBulkOperation']['url']
+
+
+def get_shops_creation_date(shop_name: str, api_key: str, access_token: str) -> str:
     res = requests.get(
-        f"https://{config.APIkeys.KeepNatureSafeAPIKey}:{config.APIkeys.KeepNatureSafeAccessToken}@{shop_name}"
+        f"https://{api_key}:{access_token}@{shop_name}"
         f".myshopify.com/admin/api/2022-10/shop.json")
     return json.loads(json.dumps(res.json()))['shop']['created_at']
 
 
-def create_and_write_to_aws_with_lsi(table_name: str, data: list):
+def create_and_write_to_aws_with_lsi(table_name: str, data: list) -> None:
     """
     Create a tabel first and write the data with using Dynamo Db's LSI -> this function is to be used for the first time
     pulls only.
@@ -230,7 +225,7 @@ def create_and_write_to_aws_with_lsi(table_name: str, data: list):
         print(f"Couldn't load data to table {table_name} - {e}")
 
 
-def create_and_write_to_aws_with_lsi_transformed(table_name: str, data: list):
+def create_and_write_to_aws_with_lsi_transformed(table_name: str, data: list) -> None:
     """
     Create a tabel first and write the data with an LSI -> transformations -> -> this function is to be used for the
     first time pulls only.
@@ -282,7 +277,7 @@ def create_and_write_to_aws_with_lsi_transformed(table_name: str, data: list):
         print(f"Couldn't load data to table {table_name} - {e}")
 
 
-def write_to_aws(table_name: str, data: list):
+def write_to_aws(table_name: str, data: list) -> None:
     """
     Write data to db
     :param table_name: a string
@@ -298,80 +293,65 @@ def write_to_aws(table_name: str, data: list):
         print(f"Couldn't load data to table {table_name}")
 
 
-def wrapper(client_name: str):
+def wrapper() -> None:
     """
     Runs the Code for one client
-    :param client_name: a string
     """
     existing_tables = dynamodb_client.list_tables()['TableNames']
     last_day_of_previous_month = date.today().replace(day=1) - timedelta(days=1)
-    first_day_of_this_month = f'{datetime.datetime.today().replace(day=1)}'
-    # last_day_of_previous_month_string = f'{last_day_of_previous_month.year}-{last_day_of_previous_month.month}' \
-    #                                     f'-{last_day_of_previous_month.day + 1}'
+    first_day_of_this_month = str(datetime.datetime.today().replace(day=1).isoformat())
     first_day_of_previous_month_string = str(date.today().replace(day=1) -
                                              timedelta(days=last_day_of_previous_month.day))
-    shops_creation_date = get_shops_creation_date(client_name)
+    all_clients = get_all_clients()
+    for client in all_clients:
+        client_name = client["name"]
+        client_api_key = client["API-Key"]
+        client_access_token = client["Access-Token"]
+        shops_creation_date = get_shops_creation_date(client_name, client_api_key, client_access_token)
+        if f'{client_name}-raw' and f'{client_name}-transformed' not in existing_tables:
+            # GETTING THE RAW DATA
 
-    if f'{client_name}-raw' and f'{client_name}-transformed' not in existing_tables:
+            bulk_data_url = get_bulk_data_url(client_name, shops_creation_date, first_day_of_this_month,
+                                              client_api_key, client_access_token)
+            data = get_data(bulk_data_url)
+            print(bulk_data_url)
 
-        # GETTING THE RAW DATA
+            # WRITING THE RAW DATA FOR THE FIRST TIME
 
-        bulk_data_url = get_bulk_data_url(client_name, shops_creation_date, first_day_of_this_month)
-        data = get_data(bulk_data_url)
+            create_and_write_to_aws_with_lsi(client_name, data)
 
-        # WRITING THE RAW DATA FOR THE FIRST TIME
+            # CONVERTING RAW DATA TO TRANSFORMATIONS
 
-        create_and_write_to_aws_with_lsi(client_name, data)
+            split_data = split_data_by_year_and_month(data)
+            transformed_data = transform_split_data(split_data)
 
-        # CONVERTING RAW DATA TO TRANSFORMATIONS
+            # WRITING THE TRANSFORMATIONS FOR THE FIRST TIME
 
-        split_data = split_data_by_year_and_month(data)
-        transformed_data = transform_split_data(split_data)
+            create_and_write_to_aws_with_lsi_transformed(client_name, transformed_data)
+        else:
 
-        # WRITING THE TRANSFORMATIONS FOR THE FIRST TIME
+            # GETTING THE RAW DATA
 
-        create_and_write_to_aws_with_lsi_transformed(client_name, transformed_data)
-        print(bulk_data_url)
-    else:
+            bulk_data_url = get_bulk_data_url(client_name, first_day_of_previous_month_string,
+                                              first_day_of_this_month, client_api_key, client_access_token)
+            data = get_data(bulk_data_url)
 
-        # GETTING THE RAW DATA
+            # WRITING THE RAW DATA MONTHLY
 
-        bulk_data_url = get_bulk_data_url(client_name, first_day_of_previous_month_string,
-                                          first_day_of_this_month)
-        data = get_data(bulk_data_url)
+            write_to_aws(f'{client_name}-raw', data)
 
-        # WRITING THE RAW DATA MONTHLY
+            # CONVERTING RAW DATA TO TRANSFORMATIONS
 
-        write_to_aws(f'{client_name}-raw', data)
+            split_data = split_data_by_year_and_month(data)
+            transformed_data = transform_split_data(split_data)
 
-        # CONVERTING RAW DATA TO TRANSFORMATIONS
+            # WRITING THE TRANSFORMATIONS MONTHLY
 
-        split_data = split_data_by_year_and_month(data)
-        transformed_data = transform_split_data(split_data)
-
-        # WRITING THE TRANSFORMATIONS MONTHLY
-
-        write_to_aws(f'{client_name}-transformed', transformed_data)
-    print(bulk_data_url)
-
-
-def get_data_from_shopify(client_name: str, start_date: str, end_date: str):
-    # NOTE - THIS IS A HELPER FUNCTION IN CASE THE DEVELOPERS WANT A XLSX SHEET OF RAW DATA FROM THE CODE
-    """
-    This method can be used to test data by getting an Excel file.
-    :param client_name: name of the shop
-    :param start_date: a string (yyyy-mm-dd)
-    :param end_date: a string (yyyy-mm-dd) the day should be one more than the last date you actually want
-    """
-    url = get_bulk_data_url(client_name, start_date, end_date)
-    data = get_data(url)
-    df = pandas.DataFrame(data=data)
-    df.to_excel("Shopify_Data_From_GraphQl_API-123.xlsx", index=False)
-    print(len(data))
-    print(url)
+            write_to_aws(f'{client_name}-transformed', transformed_data)
+        # print(bulk_data_url)
 
 
-def split_data_by_year_and_month(data: list):
+def split_data_by_year_and_month(data: list) -> list:
     """
     This function separates the collected data into chunks of monthly data.
     :param data: a list of orders
@@ -392,7 +372,7 @@ def split_data_by_year_and_month(data: list):
     return data_separated_by_month_and_year
 
 
-def transform_split_data(data: list):
+def transform_split_data(data: list) -> list:
     """
     This function is responsible for transforming the data into groups of first-time orders and multiple orders and then
     add Total Sales, AOV and Average orders.
@@ -423,17 +403,17 @@ def transform_split_data(data: list):
         multiple_transformed = {"Type": "Multiple", "Date": f'{each_month_year_key}'}
 
         for orders in list_of_monthly_orders:
-            if orders["IsFirstOrderMonth"] is not None:
-                if orders["IsFirstOrderMonth"] is True:
-                    first_time_count += 1
-                    first_time_sales += float(orders["TotalSales"])
-                    first_order_set.append(orders["CustomerID"])
-                elif orders["IsFirstOrderMonth"] is False:
-                    multiple_count += 1
-                    multiple_sales += float(orders["TotalSales"])
-                    multiple_orders_set.append(orders["CustomerID"])
+            if orders["IsFirstOrderMonth"] == "True":
+                first_time_count += 1
+                first_time_sales += float(orders["TotalSales"])
+                first_order_set.append(orders["CustomerID"])
+            elif orders["IsFirstOrderMonth"] == "False":
+                multiple_count += 1
+                multiple_sales += float(orders["TotalSales"])
+                multiple_orders_set.append(orders["CustomerID"])
 
         # Setting the Count for a particular year-month
+
         first_time_transformed["Count"] = str(first_time_count)
         multiple_transformed["Count"] = str(multiple_count)
 
@@ -441,18 +421,65 @@ def transform_split_data(data: list):
         first_time_transformed["TotalSales"] = f'{(round(first_time_sales, 2))}'
         multiple_transformed["TotalSales"] = f'{round(multiple_sales, 2)}'
 
-        # Setting the AOV for a particular year-month
-        first_time_transformed["AOV"] = f'{round(float(first_time_sales / first_time_count), 2)}'
-        multiple_transformed["AOV"] = f'{round(float(multiple_sales / multiple_count), 2)}'
+        if first_time_count == 0 or first_time_sales == 0:
+            first_time_transformed["AOV"] = "0"
+            first_time_transformed["Avg. Orders"] = "0"
+        elif first_time_count != 0 or first_time_sales != 0:
+            first_time_transformed["AOV"] = f'{round(float(first_time_sales / first_time_count), 2)}'
+            first_time_transformed["Avg. Orders"] = f'{round(first_time_count / len(set(first_order_set)), 3)}'
+        if multiple_count == 0 or multiple_sales == 0:
+            multiple_transformed["AOV"] = "0"
+            multiple_transformed["Avg. Orders"] = "0"
+        elif multiple_count != 0 or multiple_sales != 0:
+            multiple_transformed["AOV"] = f'{round(float(multiple_sales / multiple_count), 2)}'
+            multiple_transformed["Avg. Orders"] = f'{round(multiple_count / len(set(multiple_orders_set)), 3)}'
 
-        # Setting the Average Orders for a particular year-month.
-        first_time_transformed["Avg. Orders"] = f'{round(first_time_count / len(set(first_order_set)), 3)}'
-        multiple_transformed["Avg. Orders"] = f'{round(multiple_count / len(set(multiple_orders_set)), 3)}'
-
-        # Adding the first time and Multiple time transformations for a particular month to the all-time
         # transformations list
         transformed_data.append(first_time_transformed)
         transformed_data.append(multiple_transformed)
     for items in transformed_data:
         print(items)
     return transformed_data
+
+
+def get_all_clients() -> list[dict]:
+    """
+    Get a list of all the clients added through the Google sheets.
+    :return: a list of dictionaries
+    """
+    table = dynamodb.Table("ClientInfo")
+    response = table.scan()
+    return response["Items"]
+
+
+def get_api_keys_and_access_keys_from_shopify(client_name: str) -> dict:
+    """
+    This is a helper function if the developers want to get api key of a single client
+    :param client_name: the name of the client
+    :return: a dictionary
+    """
+    table = dynamodb.Table("ClientInfo")
+    response = table.scan()
+    data = response["Items"]
+    for client in data:
+        if client['name'] == client_name:
+            return client
+    return {"message": "client does not exist"}
+
+
+def stop_query(client_name: str, bulk_operation_id: str) -> requests.Response:
+    """
+    This function is used to cancel an ongoing bulk query.
+    :param client_name: the name of the shopify store
+    :param bulk_operation_id: the id of the bulk operation that needs to be canceled.
+    :return: a Response object
+    """
+    store_url = f"https://{client_name}.myshopify.com"
+    api_url = f'{store_url}/admin/api/2022-07/graphql.json'
+    client = get_api_keys_and_access_keys_from_shopify(client_name)
+    api_key = client["API-Key"]
+    access_token = client["Access-Token"]
+    bulk_query = requests.post(api_url,
+                               auth=(api_key, access_token),
+                               json={"query": BulkOperationsQueries.get_cancel_query(bulk_operation_id)})
+    return bulk_query

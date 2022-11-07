@@ -99,3 +99,21 @@ PollQuery = '''
         }
     }
 '''
+
+
+# This query is used to cancel an ongoing query
+def get_cancel_query(bulk_operation_id: str):
+    CancelQuery = f'''
+    mutation {{
+      bulkOperationCancel(id: "gid://shopify/BulkOperation/{bulk_operation_id}") {{
+        bulkOperation {{
+          status
+        }}
+        userErrors {{
+          field
+          message
+        }}
+      }}
+    }}
+    '''
+    return CancelQuery
