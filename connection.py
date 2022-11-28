@@ -22,19 +22,54 @@ dynamodb = boto3.resource(service_name='dynamodb')
 dynamodb_client = boto3.client(service_name='dynamodb')
 
 
+def add_is_first_order(url: str) -> list:
+    res = requests.get(url)
+    jsonObj = pandas.read_json(json.loads(json.dumps(res.text)), lines=True)
+    json_file = json.loads(jsonObj.to_json(orient='table'))
+
+    resp = json_file['data']
+    list_of_orders = [resp[0]]
+    list_of_each_customers_orders = []
+    resp.pop(0)
+
+    for each_line in resp:
+        if each_line['id'] is not None:
+            date_for_each_order = str(list_of_orders[len(list_of_orders) - 1]['createdAt'])[:-1]
+            date_for_each_order = (
+                        datetime.datetime.fromisoformat(date_for_each_order) - datetime.timedelta(hours=8)).isoformat()
+            if len(list_of_each_customers_orders) > 0:
+                if min(list_of_each_customers_orders) == date_for_each_order:
+                    list_of_orders[len(list_of_orders) - 1]['IsFirstOrder'] = "True"
+                else:
+                    list_of_orders[len(list_of_orders) - 1]['IsFirstOrder'] = "False"
+                list_of_orders[len(list_of_orders) - 1]['FirstOrderDate'] = min(list_of_each_customers_orders)
+            list_of_orders.append(each_line)
+            list_of_each_customers_orders = []
+        else:
+            order = str(each_line['createdAt'])[:-1]
+            order = (datetime.datetime.fromisoformat(order) - datetime.timedelta(hours=8)).isoformat()
+            list_of_each_customers_orders.append(order)
+
+    last_order_date = str(list_of_orders[len(list_of_orders) - 1]['createdAt'])[:-1]
+    last_order_date = (datetime.datetime.fromisoformat(last_order_date) - datetime.timedelta(hours=8)).isoformat()
+    if min(list_of_each_customers_orders) == last_order_date:
+        list_of_orders[len(list_of_orders) - 1]['IsFirstOrder'] = "True"
+    else:
+        list_of_orders[len(list_of_orders) - 1]['IsFirstOrder'] = "False"
+    list_of_orders[len(list_of_orders) - 1]['FirstOrderDate'] = min(list_of_each_customers_orders)
+
+    return list_of_orders
+
+
 def get_data(url: str) -> list:
     """
     This function returns the actual data parsed from the url we get from the Bulk Operation
     :param url: a String
     :return: a dictionary
     """
-    res = requests.get(url)
-    jsonObj = pandas.read_json(json.loads(json.dumps(res.text)), lines=True)
-    json_file = json.loads(jsonObj.to_json(orient='table'))
-    # print(json_file["data"])
-    print(url)
+    data = add_is_first_order(url)
     data_to_be_pushed = []
-    for each_line in json_file["data"]:
+    for each_line in data:
         line = {}
         if each_line['id'] is None:
             line["OrderID"] = ""
@@ -50,26 +85,18 @@ def get_data(url: str) -> list:
             line["OrderDate"] = ""
         else:
             date_for_each_order = str(each_line['createdAt'])[:-1]
-            line["OrderDate"] = (datetime.datetime.fromisoformat(date_for_each_order) - timedelta(hours=8)).isoformat()
+            line["OrderDate"] = (
+                    datetime.datetime.fromisoformat(date_for_each_order) - datetime.timedelta(hours=8)).isoformat()
             line["Year"] = f'{datetime.datetime.fromisoformat(line["OrderDate"]).year}'
 
         if each_line['customer'] is None:
             line["CustomerID"] = ""
             line["TotalOrdersMadeByTheCustomer"] = ""
             line["AverageOrderValue"] = ""
-            line["FirstOrderDate"] = ""
-            line["IsFirstOrderMonth"] = "None"
         else:
             line["CustomerID"] = each_line['customer']['id']
             line["TotalOrdersMadeByTheCustomer"] = each_line['customer']['numberOfOrders']
             line["AverageOrderValue"] = each_line['customer']['averageOrderAmountV2']['amount']
-            line["FirstOrderDate"] = each_line['customer']['createdAt']
-            order_date_month_year = f'{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["createdAt"])[:-1]).month}'
-            first_order_month_year = f'{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).year}-{datetime.datetime.fromisoformat(str(each_line["customer"]["createdAt"])[:-1]).month}'
-            if order_date_month_year == first_order_month_year:
-                line["IsFirstOrderMonth"] = "True"
-            else:
-                line["IsFirstOrderMonth"] = "False"
 
         if each_line["currentTotalDiscountsSet"] is None:
             line["Discounts"] = "0.00"
@@ -111,8 +138,16 @@ def get_data(url: str) -> list:
                                      float(line["Discounts"]) +
                                      float(line["Returns"]))
 
-        # print(line)
+        if 'FirstOrderDate' not in each_line.keys():
+            line['FirstOrderDate'] = each_line['createdAt']
+            line['IsFirstOrder'] = True
+        else:
+            line['FirstOrderDate'] = each_line['FirstOrderDate']
+            line['IsFirstOrder'] = each_line['IsFirstOrder']
+
         data_to_be_pushed.append(line)
+
+        # print(line)
     return data_to_be_pushed
 
 
@@ -140,7 +175,7 @@ def get_bulk_data_url(store_name: str, start_date: str, end_date: str, api_key: 
             # url = poll_query.json()['data']['currentBulkOperation']['url']
             # data = get_data(url)
             # return data
-            # print(poll_query.json()['data']['currentBulkOperation']['url'])
+            print(poll_query.json()['data']['currentBulkOperation']['url'])
             return poll_query.json()['data']['currentBulkOperation']['url']
 
 
@@ -314,7 +349,9 @@ def wrapper() -> None:
             bulk_data_url = get_bulk_data_url(client_name, shops_creation_date, first_day_of_this_month,
                                               client_api_key, client_access_token)
             data = get_data(bulk_data_url)
-            print(bulk_data_url)
+            # "https://storage.googleapis.com/shopify-tiers-assets-prod-us-east1/9fjmigmqno241a6l66k45zzmbyas?GoogleAccessId=assets-us-prod%40shopify-tiers.iam.gserviceaccount.com&Expires=1670160211&Signature=LdoNMun7fGHz7Hl0AJd5%2BXC53p%2BjdbCM%2B%2F5WhgPHQpQuLTRYNVMPwRUriNjJeJMFw1vs61FUmG%2FsGDOY0yGUuIV2TkjbTxb9VOFQnY5ASa4vj%2FZlt34Zd4IY%2F6LjimZO3quSI2320tBOygyRHw0xW1UdOWwuE8cXz8J2gWhovJ%2FY9iCCnHWmmmAZ6UCTNthOmsgrgiZ1j7n0Xv3Mk1I58QkCG7AyixKlYSYWovqiaw4ovT%2BBlaIh8gUKYKAm%2FPbQh4%2FsUs5aVImOEf5lEfcg1lTFJRTNA8Tw8KAHBGXhV1Boohv1Zowzo%2BLbeC6JMgB4F7RkB%2BJFhPR2lfzNkJEiIA%3D%3D&response-content-disposition=attachment%3B+filename%3D%22bulk-2182487015615.jsonl%22%3B+filename%2A%3DUTF-8%27%27bulk-2182487015615.jsonl&response-content-type=application%2Fjsonl"
+
+            # print(bulk_data_url)
 
             # WRITING THE RAW DATA FOR THE FIRST TIME
 
@@ -329,25 +366,27 @@ def wrapper() -> None:
 
             create_and_write_to_aws_with_lsi_transformed(client_name, transformed_data)
         else:
+            # Checking if this is the first day of the month so that monthly data from last month can be pulled......
+            if datetime.datetime.today().day == 1:
 
-            # GETTING THE RAW DATA
+                # GETTING THE RAW DATA
 
-            bulk_data_url = get_bulk_data_url(client_name, first_day_of_previous_month_string,
-                                              first_day_of_this_month, client_api_key, client_access_token)
-            data = get_data(bulk_data_url)
+                bulk_data_url = get_bulk_data_url(client_name, first_day_of_previous_month_string,
+                                                  first_day_of_this_month, client_api_key, client_access_token)
+                data = get_data(bulk_data_url)
 
-            # WRITING THE RAW DATA MONTHLY
+                # WRITING THE RAW DATA MONTHLY
 
-            write_to_aws(f'{client_name}-raw', data)
+                write_to_aws(f'{client_name}-raw', data)
 
-            # CONVERTING RAW DATA TO TRANSFORMATIONS
+                # CONVERTING RAW DATA TO TRANSFORMATIONS
 
-            split_data = split_data_by_year_and_month(data)
-            transformed_data = transform_split_data(split_data)
+                split_data = split_data_by_year_and_month(data)
+                transformed_data = transform_split_data(split_data)
 
-            # WRITING THE TRANSFORMATIONS MONTHLY
+                # WRITING THE TRANSFORMATIONS MONTHLY
 
-            write_to_aws(f'{client_name}-transformed', transformed_data)
+                write_to_aws(f'{client_name}-transformed', transformed_data)
         # print(bulk_data_url)
 
 
@@ -403,11 +442,13 @@ def transform_split_data(data: list) -> list:
         multiple_transformed = {"Type": "Multiple", "Date": f'{each_month_year_key}'}
 
         for orders in list_of_monthly_orders:
-            if orders["IsFirstOrderMonth"] == "True":
+            # if orders["IsFirstOrderMonth"] == "True":
+            if orders["IsFirstOrder"] == "True":
                 first_time_count += 1
                 first_time_sales += float(orders["TotalSales"])
                 first_order_set.append(orders["CustomerID"])
-            elif orders["IsFirstOrderMonth"] == "False":
+            # elif orders["IsFirstOrderMonth"] == "False":
+            elif orders["IsFirstOrder"] == "False":
                 multiple_count += 1
                 multiple_sales += float(orders["TotalSales"])
                 multiple_orders_set.append(orders["CustomerID"])
@@ -483,3 +524,78 @@ def stop_query(client_name: str, bulk_operation_id: str) -> requests.Response:
                                auth=(api_key, access_token),
                                json={"query": BulkOperationsQueries.get_cancel_query(bulk_operation_id)})
     return bulk_query
+
+
+def add_is_first_order_month(url: str) -> list:
+    # Getting raw data from Shopify
+    res = requests.get(url)
+    jsonObj = pandas.read_json(json.loads(json.dumps(res.text)), lines=True)
+    json_file = json.loads(jsonObj.to_json(orient='table'))
+
+    # Declaring helper lists to identify first-time user vs returning users
+    list_of_orders = []
+    list_of_each_customers_orders = []
+
+    # Adding IsFirstOrderMonth and FirstOrderDate to the raw data-set
+    for each_line in json_file['data']:
+        if each_line['id'] is not None:
+            date_for_each_order = str(each_line['createdAt'])[:-1]
+            date_for_each_order = (
+                        datetime.datetime.fromisoformat(date_for_each_order) - datetime.timedelta(hours=8)).isoformat()
+            order_month = datetime.datetime.fromisoformat(date_for_each_order).month
+            order_year = datetime.datetime.fromisoformat(date_for_each_order).year
+            flag = 0
+            single_order_flag = 0
+            if len(list_of_each_customers_orders) == 1:
+                each_cust_order_month_single = datetime.datetime.fromisoformat(list_of_each_customers_orders[0]).month
+                each_cust_order_year_single = datetime.datetime.fromisoformat(list_of_each_customers_orders[0]).year
+                if each_cust_order_month_single != order_month or each_cust_order_year_single != order_year:
+                    single_order_flag = 1
+                if single_order_flag == 1:
+                    list_of_orders[len(list_of_orders) - 1]['IsFirstOrderMonth'] = False
+                else:
+                    list_of_orders[len(list_of_orders) - 1]['IsFirstOrderMonth'] = True
+                list_of_orders[len(list_of_orders) - 1]['FirstOrderDate'] = min(list_of_each_customers_orders)
+            if len(list_of_each_customers_orders) > 1:
+                for each_cust_order in list_of_each_customers_orders:
+                    each_cust_order_month = datetime.datetime.fromisoformat(each_cust_order).month
+                    each_cust_order_year = datetime.datetime.fromisoformat(each_cust_order).year
+                    if each_cust_order_year != order_year or each_cust_order_month != order_month:
+                        flag = 1
+                if flag == 1:
+                    list_of_orders[len(list_of_orders) - 1]['IsFirstOrderMonth'] = False
+                else:
+                    list_of_orders[len(list_of_orders) - 1]['IsFirstOrderMonth'] = True
+                list_of_orders[len(list_of_orders) - 1]['FirstOrderDate'] = min(list_of_each_customers_orders)
+
+            list_of_orders.append(each_line)
+
+            # print(list_of_each_customers_orders)
+
+            list_of_each_customers_orders = []
+        else:
+            order = str(each_line['createdAt'])[:-1]
+            order = (datetime.datetime.fromisoformat(order) - datetime.timedelta(hours=8)).isoformat()
+            list_of_each_customers_orders.append(order)
+
+    # Declaring helper variables for the last order since the loop only processes till the second-last item
+    last_order_date = str(list_of_orders[len(list_of_orders) - 1]['createdAt'])[:-1]
+    last_order_date = (datetime.datetime.fromisoformat(last_order_date) - datetime.timedelta(hours=8)).isoformat()
+    last_order_month = datetime.datetime.fromisoformat(last_order_date).month
+    last_order_year = datetime.datetime.fromisoformat(last_order_date).year
+    last_flag = 0
+
+    # Processing the last remaining order
+    for each_cust_order in list_of_each_customers_orders:
+        each_cust_order_month = datetime.datetime.fromisoformat(each_cust_order).month
+        each_cust_order_year = datetime.datetime.fromisoformat(each_cust_order).year
+        if each_cust_order_year != last_order_year or each_cust_order_month != last_order_month:
+            last_flag = 1
+    if last_flag == 1:
+        list_of_orders[len(list_of_orders) - 1]['IsFirstOrderMonth'] = False
+    else:
+        list_of_orders[len(list_of_orders) - 1]['IsFirstOrderMonth'] = True
+
+    list_of_orders[len(list_of_orders) - 1]['FirstOrderDate'] = min(list_of_each_customers_orders)
+
+    return list_of_orders

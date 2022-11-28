@@ -21,6 +21,15 @@ def create_bulk_query(start_date_of_orders, end_date_of_orders):
               numberOfOrders
               averageOrderAmountV2{{amount}}
               createdAt
+              orders{{
+                edges{{
+                    node{{
+                        createdAt
+                        name
+                        displayFulfillmentStatus
+                    }}    
+                }}
+              }}
             }}
             createdAt
             currentTotalDiscountsSet {{
