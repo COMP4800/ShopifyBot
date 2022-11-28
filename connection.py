@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 from datetime import date, timedelta
 import boto3
 from botocore.exceptions import ClientError
@@ -18,8 +19,10 @@ from collections import defaultdict
 # 5. In the terminal of the repo ---> aws configure
 # 6. Add your credentials and the code should work since you would be connected to the aws now!
 
-dynamodb = boto3.resource(service_name='dynamodb')
-dynamodb_client = boto3.client(service_name='dynamodb')
+dynamodb = boto3.resource(service_name='dynamodb', aws_access_key_id=os.getenv("AccessKey"),
+                          aws_secret_access_key=os.getenv("SecretKey"), region_name="ca-central-1")
+dynamodb_client = boto3.client(service_name='dynamodb', aws_access_key_id=os.getenv("AccessKey"),
+                               aws_secret_access_key=os.getenv("SecretKey"), region_name="ca-central-1")
 
 
 def add_is_first_order(url: str) -> list:
@@ -36,7 +39,7 @@ def add_is_first_order(url: str) -> list:
         if each_line['id'] is not None:
             date_for_each_order = str(list_of_orders[len(list_of_orders) - 1]['createdAt'])[:-1]
             date_for_each_order = (
-                        datetime.datetime.fromisoformat(date_for_each_order) - datetime.timedelta(hours=8)).isoformat()
+                    datetime.datetime.fromisoformat(date_for_each_order) - datetime.timedelta(hours=8)).isoformat()
             if len(list_of_each_customers_orders) > 0:
                 if min(list_of_each_customers_orders) == date_for_each_order:
                     list_of_orders[len(list_of_orders) - 1]['IsFirstOrder'] = "True"
@@ -368,7 +371,6 @@ def wrapper() -> None:
         else:
             # Checking if this is the first day of the month so that monthly data from last month can be pulled......
             if datetime.datetime.today().day == 1:
-
                 # GETTING THE RAW DATA
 
                 bulk_data_url = get_bulk_data_url(client_name, first_day_of_previous_month_string,
@@ -541,7 +543,7 @@ def add_is_first_order_month(url: str) -> list:
         if each_line['id'] is not None:
             date_for_each_order = str(each_line['createdAt'])[:-1]
             date_for_each_order = (
-                        datetime.datetime.fromisoformat(date_for_each_order) - datetime.timedelta(hours=8)).isoformat()
+                    datetime.datetime.fromisoformat(date_for_each_order) - datetime.timedelta(hours=8)).isoformat()
             order_month = datetime.datetime.fromisoformat(date_for_each_order).month
             order_year = datetime.datetime.fromisoformat(date_for_each_order).year
             flag = 0
