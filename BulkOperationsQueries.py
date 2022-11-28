@@ -21,6 +21,15 @@ def create_bulk_query(start_date_of_orders, end_date_of_orders):
               numberOfOrders
               averageOrderAmountV2{{amount}}
               createdAt
+              orders{{
+                edges{{
+                    node{{
+                        createdAt
+                        name
+                        displayFulfillmentStatus
+                    }}    
+                }}
+              }}
             }}
             createdAt
             currentTotalDiscountsSet {{
@@ -99,3 +108,21 @@ PollQuery = '''
         }
     }
 '''
+
+
+# This query is used to cancel an ongoing query
+def get_cancel_query(bulk_operation_id: str):
+    CancelQuery = f'''
+    mutation {{
+      bulkOperationCancel(id: "gid://shopify/BulkOperation/{bulk_operation_id}") {{
+        bulkOperation {{
+          status
+        }}
+        userErrors {{
+          field
+          message
+        }}
+      }}
+    }}
+    '''
+    return CancelQuery
